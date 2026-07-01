@@ -1678,8 +1678,14 @@ sub vmconfig_hotplug_pending {
                 # pass
             } elsif ($opt =~ m/^unused(\d+)$/) {
                 my $volid = $class->parse_volume($opt, $conf->{$opt})->{volume};
-                PVE::LXC::delete_mountpoint_volume($storecfg, $vmid, $volid)
-                    if !$class->is_volume_in_use($conf, $volid, 1, 1);
+                with_checked_volid(
+                    $storecfg,
+                    $volid,
+                    sub {
+                        PVE::LXC::delete_mountpoint_volume($storecfg, $vmid, $volid)
+                            if !$class->is_volume_in_use($conf, $volid, 1, 1);
+                    },
+                );
             } elsif ($opt eq 'swap') {
                 $hotplug_memory->(undef, 0);
             } elsif ($opt eq 'cpulimit') {
@@ -1780,14 +1786,26 @@ sub vmconfig_apply_pending {
             if ($opt =~ m/^mp(\d+)$/) {
                 my $mp = $class->parse_volume($opt, $conf->{$opt});
                 if ($mp->{type} eq 'volume') {
-                    # FIXME: use $mp->{volume} for is_volume_in_use, fix conditions for check
-                    $class->add_unused_volume($conf, $mp->{volume})
-                        if !$class->is_volume_in_use($conf, $conf->{$opt}, 1, 1);
+                    with_checked_volid(
+                        $storecfg,
+                        $mp->{volume},
+                        sub {
+                            # FIXME: use $mp->{volume} for is_volume_in_use, fix conditions for check
+                            $class->add_unused_volume($conf, $mp->{volume})
+                                if !$class->is_volume_in_use($conf, $conf->{$opt}, 1, 1);
+                        },
+                    );
                 }
             } elsif ($opt =~ m/^unused(\d+)$/) {
                 my $volid = $class->parse_volume($opt, $conf->{$opt})->{volume};
-                PVE::LXC::delete_mountpoint_volume($storecfg, $vmid, $volid)
-                    if !$class->is_volume_in_use($conf, $volid, 1, 1);
+                with_checked_volid(
+                    $storecfg,
+                    $volid,
+                    sub {
+                        PVE::LXC::delete_mountpoint_volume($storecfg, $vmid, $volid)
+                            if !$class->is_volume_in_use($conf, $volid, 1, 1);
+                    },
+                );
             } elsif ($opt =~ m/^net(\d+)$/) {
                 if ($have_sdn) {
                     my $net = $class->parse_lxc_network($conf->{$opt});
@@ -1906,8 +1924,14 @@ sub apply_pending_mountpoint {
     if (defined($old)) {
         my $mp = $class->parse_volume($opt, $old);
         if ($mp->{type} eq 'volume') {
-            $class->add_unused_volume($conf, $mp->{volume})
-                if !$class->is_volume_in_use($conf, $conf->{$opt}, 1, 1);
+            with_checked_volid(
+                $storecfg,
+                $mp->{volume},
+                sub {
+                    $class->add_unused_volume($conf, $mp->{volume})
+                        if !$class->is_volume_in_use($conf, $conf->{$opt}, 1, 1);
+                },
+            );
         }
     }
 }
