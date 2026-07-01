@@ -1024,6 +1024,28 @@ sub destroy_lxc_container {
     my ($storage_cfg, $vmid, $conf, $replacement_conf, $purge_unreferenced) = @_;
 
     my $volids = {};
+
+    if ($conf->{template}) {
+        PVE::LXC::Config->foreach_volume_full(
+            $conf,
+            { include_unused => 1 },
+            sub {
+                my ($ms, $mountpoint) = @_;
+                my $volid = $mountpoint->{volume};
+                return if !$volid || PVE::LXC::Config->classify_mountpoint($volid) ne 'volume';
+                my $result =
+                    eval { PVE::Storage::volume_is_base_and_used($storage_cfg, $volid) };
+                if ($@) {
+                    # early check, removal of volume will fail later anyway, so warning here is fine
+                    PVE::RESTEnvironment::log_warn(
+                        "failed to check if volume '$volid' is used by linked clones: $@");
+                }
+
+                die "base volume '$volid' is still in use by linked clone\n" if $result;
+            },
+        );
+    }
+
     my $remove_volume = sub {
         my ($ms, $mountpoint) = @_;
 
