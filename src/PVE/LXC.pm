@@ -1032,7 +1032,8 @@ sub destroy_lxc_container {
         return if $volids->{$volume};
         $volids->{$volume} = 1;
 
-        delete_mountpoint_volume($storage_cfg, $vmid, $volume);
+        eval { delete_mountpoint_volume($storage_cfg, $vmid, $volume); };
+        PVE::RESTEnvironment::log_warn("failed to delete mountpoint volume $volume: $@") if $@;
     };
     PVE::LXC::Config->foreach_volume_full($conf, { include_unused => 1 }, $remove_volume);
 
