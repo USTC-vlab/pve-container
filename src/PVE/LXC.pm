@@ -1007,16 +1007,16 @@ sub get_primary_ips {
 }
 
 sub delete_mountpoint_volume {
-    my ($storage_cfg, $vmid, $volume) = @_;
+    my ($storage_cfg, $vmid, $volid) = @_;
 
-    return if PVE::LXC::Config->classify_mountpoint($volume) ne 'volume';
+    return if PVE::LXC::Config->classify_mountpoint($volid) ne 'volume';
 
-    my ($vtype, $name, $owner) = PVE::Storage::parse_volname($storage_cfg, $volume);
+    my ($vtype, $name, $owner) = PVE::Storage::parse_volname($storage_cfg, $volid);
 
     if ($vmid == $owner) {
-        PVE::Storage::vdisk_free($storage_cfg, $volume);
+        PVE::Storage::vdisk_free($storage_cfg, $volid);
     } else {
-        warn "ignore deletion of '$volume', CT $vmid isn't the owner!\n";
+        warn "ignore deletion of '$volid', CT $vmid isn't the owner!\n";
     }
 }
 
@@ -1027,13 +1027,13 @@ sub destroy_lxc_container {
     my $remove_volume = sub {
         my ($ms, $mountpoint) = @_;
 
-        my $volume = $mountpoint->{volume};
+        my $volid = $mountpoint->{volume};
 
-        return if $volids->{$volume};
-        $volids->{$volume} = 1;
+        return if $volids->{$volid};
+        $volids->{$volid} = 1;
 
-        eval { delete_mountpoint_volume($storage_cfg, $vmid, $volume); };
-        PVE::RESTEnvironment::log_warn("failed to delete mountpoint volume $volume: $@") if $@;
+        eval { delete_mountpoint_volume($storage_cfg, $vmid, $volid); };
+        PVE::RESTEnvironment::log_warn("failed to delete mountpoint volume $volid: $@") if $@;
     };
     PVE::LXC::Config->foreach_volume_full($conf, { include_unused => 1 }, $remove_volume);
 
