@@ -11,6 +11,7 @@ use PVE::DataCenterConfig;
 use PVE::GuestHelpers;
 use PVE::INotify;
 use PVE::JSONSchema qw(get_standard_option);
+use PVE::RESTEnvironment;
 use PVE::Tools;
 
 use PVE::LXC;
@@ -1607,6 +1608,20 @@ sub calculate_memory_constraints {
         $memory >= 16 * 1024 ? int(($memory - 128) * 1024 * 1024) : int($memory * 1024 * 1016);
 
     return ($memory_max, $memory_high);
+}
+
+# Skip and warn if a volume's backing storage was already removed from the storage config, so
+# guest/volume removal can still proceed.
+sub with_checked_volid {
+    my ($storecfg, $volid, $callback) = @_;
+
+    my ($storeid) = PVE::Storage::parse_volume_id($volid);
+    if (PVE::Storage::storage_config($storecfg, $storeid, 1)) {
+        $callback->();
+    } else {
+        PVE::RESTEnvironment::log_warn(
+            "storage '$storeid' no longer exists, volume '$volid' will be removed from config");
+    }
 }
 
 my $LXC_FASTPLUG_OPTIONS = {
