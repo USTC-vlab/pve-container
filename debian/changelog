@@ -1,3 +1,19 @@
+pve-container (6.1.11) trixie; urgency=medium
+
+  * fix #3711: destroy container: warn about storage errors while deleting a
+    mount point volume instead of aborting, so a container can still be
+    removed if a volume's backing storage is gone.
+
+  * allow applying pending mount point changes when the backing storage is
+    gone: drop the dangling unused volume with a warning instead of failing,
+    matching virtual machine behavior.
+
+  * destroy container template: fail early with a clear message if a base
+    volume is still in use by a linked clone, instead of partially deleting
+    storage, matching virtual machine behavior.
+
+ -- Proxmox Support Team <support@proxmox.com>  Wed, 08 Jul 2026 05:06:29 +0200
+
 pve-container (6.1.10) trixie; urgency=medium
 
   * lxc config: mount /dev/shm as tmpfs for application containers (those with
