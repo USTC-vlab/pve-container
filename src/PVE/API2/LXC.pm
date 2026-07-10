@@ -7,6 +7,7 @@ use Fcntl qw(F_GETFD F_SETFD FD_CLOEXEC);
 use IO::Socket::UNIX;
 use Socket qw(SOCK_STREAM);
 use JSON;
+use File::Temp qw(tempdir);
 
 use PVE::AccessControl;
 use PVE::Cluster qw(cfs_read_file);
@@ -2430,8 +2431,8 @@ __PACKAGE__->register_method({
                 # we need to ensure that the volume is mapped, if not needed this is a NOP
                 my $path = PVE::Storage::map_volume($storage_cfg, $volid);
                 $path = PVE::Storage::path($storage_cfg, $volid) if !defined($path);
-                if ($running) {
 
+                if ($running) {
                     $mp->{mp} = '/';
                     my $use_loopdev = (PVE::LXC::mountpoint_mount_path($mp, $storage_cfg))[1];
                     $path = PVE::LXC::query_loopdev($path) if $use_loopdev;
@@ -2440,28 +2441,55 @@ __PACKAGE__->register_method({
                         if !$path;
                     PVE::Tools::run_command(['losetup', '--set-capacity', $path])
                         if $use_loopdev;
+                }
 
-                    # In order for resize2fs to know that we need online-resizing a mountpoint needs
-                    # to be visible to it in its namespace.
-                    # To not interfere with the rest of the system we unshare the current mount namespace,
-                    # mount over /tmp and then run resize2fs.
+                my $fstype = 'ext4';
+                eval {
+                    my @blkid_out = ();
+                    PVE::Tools::run_command(
+                        ['blkid', '-p', '-o', 'value', '-s', 'TYPE', $path],
+                        outfunc => sub { push @blkid_out, $_[0] },
+                    );
+                    $fstype = $blkid_out[0] if scalar(@blkid_out);
+                };
 
-                    # interestingly we don't need to e2fsck on mounted systems...
-                    my $quoted = PVE::Tools::shellquote($path);
-                    my $cmd =
-                        "mount --make-rprivate / && mount $quoted /tmp && resize2fs $quoted";
-                    eval { PVE::Tools::run_command([
-                            'unshare', '-m', '--', 'sh', '-c', $cmd]); };
-                    warn "Failed to update the container's filesystem: $@\n" if $@;
+                if ($fstype eq 'btrfs') {
+                    if ($running) {
+                        my $quoted = PVE::Tools::shellquote($path);
+                        my $cmd =
+                            "mount --make-rprivate / && mount $quoted /tmp && btrfs filesystem resize max /tmp";
+                        eval { PVE::Tools::run_command([
+                                'unshare', '-m', '--', 'sh', '-c', $cmd]); };
+                        warn "Failed to update the container's filesystem: $@\n" if $@;
+                    } else {
+                        eval {
+                            my $tmpdir = tempdir('/var/tmp/btrfs-resize.XXXX');
+                            PVE::Tools::run_command(['mount', $path, $tmpdir]);
+                            PVE::Tools::run_command(['btrfs', 'filesystem', 'resize', 'max', $tmpdir]);
+                            PVE::Tools::run_command(['umount', $tmpdir]);
+                            rmdir($tmpdir);
+                        };
+                        warn "Failed to update the container's filesystem: $@\n" if $@;
+
+                        PVE::Storage::unmap_volume($storage_cfg, $volid);
+                    }
                 } else {
-                    eval {
-                        PVE::Tools::run_command(['e2fsck', '-f', '-y', $path]);
-                        PVE::Tools::run_command(['resize2fs', $path]);
-                    };
-                    warn "Failed to update the container's filesystem: $@\n" if $@;
+                    if ($running) {
+                        my $quoted = PVE::Tools::shellquote($path);
+                        my $cmd =
+                            "mount --make-rprivate / && mount $quoted /tmp && resize2fs $quoted";
+                        eval { PVE::Tools::run_command([
+                                'unshare', '-m', '--', 'sh', '-c', $cmd]); };
+                        warn "Failed to update the container's filesystem: $@\n" if $@;
+                    } else {
+                        eval {
+                            PVE::Tools::run_command(['e2fsck', '-f', '-y', $path]);
+                            PVE::Tools::run_command(['resize2fs', $path]);
+                        };
+                        warn "Failed to update the container's filesystem: $@\n" if $@;
 
-                    # always un-map if not running, this is a NOP if not needed
-                    PVE::Storage::unmap_volume($storage_cfg, $volid);
+                        PVE::Storage::unmap_volume($storage_cfg, $volid);
+                    }
                 }
             }
         };
