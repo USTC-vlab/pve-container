@@ -9,6 +9,7 @@ use Fcntl qw(O_RDONLY O_WRONLY O_NOFOLLOW O_DIRECTORY O_CREAT :mode);
 use File::Basename;
 use File::Path;
 use File::Spec;
+use File::Temp qw(tempdir);
 use IO::Poll qw(POLLIN POLLHUP);
 use IO::Socket::UNIX;
 use List::Util qw(max min);
@@ -2543,24 +2544,21 @@ sub get_staging_tempfs() {
 sub mkfs {
     my ($dev, $root_uid, $root_gid) = @_;
 
-    run_command(
-        [
-            'mkfs.ext4', '-O', 'mmp', '-E', "root_owner=$root_uid:$root_gid", $dev,
-        ],
-        outfunc => sub {
-            my $line = shift;
-            # a hack to print only the relevant stuff, i.e., the one which could help on repair
-            if (
-                $line =~ /^(Creating filesystem|Filesystem UUID|Superblock backups|\s+\d+, \d)/
-            ) {
-                print "$line\n";
-            }
-        },
-        errfunc => sub {
-            my $line = shift;
-            print STDERR "$line\n" if $line && $line !~ /^mke2fs \d\.\d/;
-        },
+    run_command(['mkfs.btrfs', $dev],
+	outfunc => sub {
+	    my $line = shift;
+	    print "$line\n";
+	},
     );
+
+    my $tmpdir = tempdir('/var/tmp/mkfs.btrfs.XXXX');
+    run_command(['mount', $dev, $tmpdir]);
+    run_command(['btrfs', 'subvolume', 'create', "$tmpdir/@"]);
+    run_command(['btrfs', 'subvolume', 'set-default', "$tmpdir/@"]);
+    run_command(['btrfs', 'property', 'set', "$tmpdir/@", 'compression', 'zstd']);
+    run_command(['chown', "$root_uid:$root_gid", "$tmpdir/@"]);
+    run_command(['umount', $tmpdir]);
+    rmdir($tmpdir) or warn "failed to remove temporary directory '$tmpdir': $!\n";
 }
 
 sub format_disk {
