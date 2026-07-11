@@ -1,0 +1,53 @@
+name: Build Debian Package
+
+on:
+  push:
+    branches: [ "*" ]
+    tags: [ "*" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add Proxmox apt source
+        run: |
+          apt-get update
+          apt-get install -y curl gnupg
+          curl -fsSL https://enterprise.proxmox.com/debian/proxmox-archive-keyring-trixie.gpg \
+            | gpg --dearmor -o /usr/share/keyrings/proxmox.gpg
+          echo "deb [signed-by=/usr/share/keyrings/proxmox.gpg] http://download.proxmox.com/debian/pve trixie pve-no-subscription" \
+            | tee /etc/apt/sources.list.d/proxmox.list
+
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y devscripts equivs
+          mk-build-deps -ir -t "apt-get -y" debian/control
+
+      - name: Build package
+        run: DEB_BUILD_OPTIONS=nocheck make deb
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pve-container-deb
+          path: pve-container_*.deb
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pve-container-deb
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: pve-container_*.deb
