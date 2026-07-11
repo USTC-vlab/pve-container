@@ -283,6 +283,10 @@ sub copy_data_phase1 {
                 . " /etc/vzdump.conf\n");
             $task->{no_xattrs} = 1;
         }
+        if ($mntinfo->{fstype} =~ /^btrfs/) {
+            $self->loginfo("btrfs property is not supported.\n");
+            $task->{no_xattrs} = 1;
+        }
     }
 
     $self->$rsync_vm($task, $task->{snapdir}, "first");
