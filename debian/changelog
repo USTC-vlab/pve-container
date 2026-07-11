@@ -1,3 +1,9 @@
+pve-container (6.1.11+vlab1) UNRELEASED; urgency=medium
+
+  * Use btrfs for mkfs. Support btrfs for resizing.
+
+ -- taoky <me@taoky.moe>  Sat, 11 Jul 2026 07:36:38 +0000
+
 pve-container (6.1.11) trixie; urgency=medium
 
   * fix #3711: destroy container: warn about storage errors while deleting a
