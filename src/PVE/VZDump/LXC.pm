@@ -37,6 +37,7 @@ my $rsync_vm = sub {
         '--stats',
         '-h',
         @xattr,
+        '--filter=-x btrfs.*',
         '--numeric-ids',
         '-aH',
         '--delete',
@@ -281,10 +282,6 @@ sub copy_data_phase1 {
             $self->loginfo("temporary directory is on NFS, disabling xattr and acl"
                 . " support, consider configuring a local tmpdir via"
                 . " /etc/vzdump.conf\n");
-            $task->{no_xattrs} = 1;
-        }
-        if ($mntinfo->{fstype} =~ /^btrfs/) {
-            $self->loginfo("btrfs property is not supported.\n");
             $task->{no_xattrs} = 1;
         }
     }
