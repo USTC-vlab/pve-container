@@ -1,3 +1,10 @@
+pve-container (6.1.11+vlab2) trixie; urgency=medium
+
+  [ taoky ]
+  * Fix xattr handling when rsyncing btrfs.
+
+ -- taoky <me@taoky.moe>  Mon, 13 Jul 2026 03:13:00 +0800
+
 pve-container (6.1.11+vlab1) trixie; urgency=medium
 
   [ taoky ]
