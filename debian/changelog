@@ -1,3 +1,10 @@
+pve-container (6.1.13+vlab1) trixie; urgency=medium
+
+  [ taoky ]
+  * Bump version to 6.1.13.
+
+ -- taoky <me@taoky.moe>  Fri, 14 Aug 2026 23:59:59 +0800
+
 pve-container (6.1.13) trixie; urgency=medium
 
   * fix #7667: device passthrough: only evaluate errno when querying the
