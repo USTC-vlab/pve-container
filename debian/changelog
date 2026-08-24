@@ -1,3 +1,11 @@
+pve-container (6.1.13+vlab2) trixie; urgency=medium
+
+  [ taoky ]
+  * Allow containers with a full root filesystem to start by treating ENOSPC
+    while updating the container OS configuration as a warning.
+
+ -- taoky <me@taoky.moe>  Tue, 25 Aug 2026 03:27:16 +0800
+
 pve-container (6.1.13+vlab1) trixie; urgency=medium
 
   [ taoky ]
