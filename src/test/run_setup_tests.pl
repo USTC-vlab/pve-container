@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 
+use Errno qw(ENOSPC EROFS);
 use Test::MockModule;
 
 use PVE::Tools qw(run_command);
@@ -12,6 +13,23 @@ use lib qw(..);
 use PVE::LXC;
 use PVE::LXC::Config;
 use PVE::LXC::Setup;
+
+{
+    package Test::Setup::NoSpacePlugin;
+
+    sub pre_start_hook {
+        $! = Errno::ENOSPC();
+        die "$!\n";
+    }
+
+    sub get_ct_init_path {
+        return '/sbin/init';
+    }
+
+    sub check_systemd_nesting {
+        return;
+    }
+}
 
 sub test_file {
     my ($exp_fn, $real_fn) = @_;
@@ -113,6 +131,49 @@ sub run_test {
     print "TEST $testdir => OK\n";
 }
 
+sub test_protected_call_enospc_handling {
+    my $rootfs = "./tmprootfs";
+    my @warnings;
+    my $setup = bless {
+        conf => {},
+        plugin => bless({}, 'Test::Setup::NoSpacePlugin'),
+        rootdir => $rootfs,
+        log_warn => sub { push @warnings, @_ },
+    }, 'PVE::LXC::Setup';
+
+    my $fail_with = sub {
+        my ($errno) = @_;
+        return sub {
+            $! = $errno;
+            die "$!\n";
+        };
+    };
+
+    eval { $setup->pre_start_hook() };
+    die "pre-start hook did not ignore ENOSPC: $@" if $@;
+    die "pre-start hook did not log exactly one ENOSPC warning\n" if scalar(@warnings) != 1;
+    die "unexpected ENOSPC warning: $warnings[0]\n"
+        if $warnings[0] !~ /no space left on device.*continuing/i;
+
+    eval { $setup->protected_call($fail_with->(ENOSPC)) };
+    die "protected call unexpectedly ignored strict ENOSPC\n" if !$@;
+
+    eval { $setup->protected_call($fail_with->(EROFS), 1) };
+    die "protected call unexpectedly ignored EROFS\n" if !$@;
+
+    eval {
+        $setup->protected_call(
+            sub {
+                die "non-system setup failure\n";
+            },
+            1,
+        );
+    };
+    die "protected call unexpectedly ignored a non-system error\n" if !$@;
+
+    print "TEST protected call ENOSPC handling => OK\n";
+}
+
 my $cluster_module = Test::MockModule->new("PVE::Cluster");
 $cluster_module->mock(
     cfs_read_file => sub {
@@ -148,5 +209,7 @@ if (scalar(@ARGV)) {
         run_test($testdir);
     }
 }
+
+test_protected_call_enospc_handling();
 
 exit(0);

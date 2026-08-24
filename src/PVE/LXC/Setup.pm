@@ -3,6 +3,7 @@ package PVE::LXC::Setup;
 use strict;
 use warnings;
 
+use Errno qw(ENOSPC);
 use POSIX;
 use Cwd 'abs_path';
 
@@ -48,6 +49,8 @@ my $plugin_alias = {
     rocky => 'centos',
     almalinux => 'centos',
 };
+
+my $protected_call_enospc_exit_code = 2;
 
 my $autodetect_type = sub {
     my ($self, $rootdir, $os_release) = @_;
@@ -168,7 +171,7 @@ sub new {
 
 # Forks into a chroot and executes $sub
 sub protected_call {
-    my ($self, $sub) = @_;
+    my ($self, $sub, $ignore_enospc) = @_;
 
     # avoid recursion:
     return $sub->() if $self->{in_chroot};
@@ -182,6 +185,7 @@ sub protected_call {
         close($res_in);
         # avoid recursive forks
         $self->{in_chroot} = 1;
+        local $! = 0;
         eval {
             my $rootdir = $self->{rootdir};
             chroot($rootdir) or die "failed to change root to: $rootdir: $!\n";
@@ -192,16 +196,31 @@ sub protected_call {
                 $res_out->flush();
             }
         };
-        if (my $err = $@) {
+        my $err = $@;
+        my $errno = 0 + $!;
+        if ($err) {
             warn $err;
-            POSIX::_exit(1);
+            my $exit_code = $errno == ENOSPC ? $protected_call_enospc_exit_code : 1;
+            POSIX::_exit($exit_code);
         }
         POSIX::_exit(0);
     }
     close($res_out);
     my $result = do { local $/ = undef; <$res_in> };
     while (waitpid($child, 0) != $child) { }
-    if ($? != 0) {
+    my $status = $?;
+    if ($status != 0) {
+        if (
+            $ignore_enospc
+            && POSIX::WIFEXITED($status)
+            && POSIX::WEXITSTATUS($status) == $protected_call_enospc_exit_code
+        ) {
+            $self->{log_warn}->(
+                "unable to update container OS configuration: no space left on device; "
+                    . "continuing with the existing configuration",
+            );
+            return;
+        }
         my $method = (caller(1))[3];
         die "error in setup task $method\n";
     }
@@ -308,7 +327,7 @@ sub check_systemd_nesting {
 sub pre_start_hook {
     my ($self) = @_;
 
-    $self->protected_call(sub { $self->{plugin}->pre_start_hook($self->{conf}) });
+    $self->protected_call(sub { $self->{plugin}->pre_start_hook($self->{conf}) }, 1);
     $self->check_systemd_nesting();
 }
 
