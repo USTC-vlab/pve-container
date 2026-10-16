@@ -259,7 +259,7 @@ sub restore_external_archive {
                 grep { $_ ne '--one-file-system' } @PVE::Storage::Plugin::COMMON_TAR_FLAGS;
 
             my $create_cmd = [
-                'tar', 'cpf', '-', @flags, "--directory=$directory", '.',
+                'tar', 'cpf', '-', @flags, "--directory=$directory", '--', '.',
             ];
 
             # archive is trusted, we created it
@@ -683,7 +683,7 @@ sub restore_oci_archive {
     );
 
     # should we rather validate this on the rust side already?
-    my $has_ctrl_char = sub { return $_[0] =~ /[\x00-\x08\x10-\x1F\x7F]/; };
+    my $has_ctrl_char = sub { return $_[0] =~ /[\x00-\x08\x0A-\x1F\x7F]/; };
     my $oci_config_get_checked_scalar = sub {
         my ($key) = @_;
         my $value = $unsafe_oci_config->{$key} // return;
@@ -803,13 +803,23 @@ sub resolve_oci_user {
         })
     };
 
+    # the databases live inside the image and are thus fully untrusted
+    my $checked_id = sub {
+        my ($id, $what) = @_;
+
+        die "OCI image contains a non-numeric $what '$id' in its user database\n"
+            if defined($id) && $id !~ /^\d+$/;
+
+        return $id;
+    };
+
     # Scan file, match column $match_index against $match_val, return value at $ret_index
     my $lookup_field = sub {
         my ($file, $match_index, $match_val, $ret_index) = @_;
 
         open(my $fh, '<', $file) or return undef;
         while (my $line = <$fh>) {
-            chomp $line;
+            $line =~ s/[\r\n]+\z//; # chomp would only strip the line feed
             my @fields = split(/:/, $line);
             if (defined($fields[$match_index]) && $fields[$match_index] eq $match_val) {
                 return $fields[$ret_index];
@@ -824,11 +834,11 @@ sub resolve_oci_user {
         my @groups;
         open(my $fh, '<', $etc_group) or return undef;
         while (my $line = <$fh>) {
-            chomp $line;
+            $line =~ s/[\r\n]+\z//; # chomp would only strip the line feed
             my (undef, undef, $gid, $user_list) = split(/:/, $line);
             next if !defined($gid) || !defined($user_list);
             my @users = split(/,/, $user_list);
-            push @groups, $gid if grep { $_ eq $username } @users;
+            push @groups, $checked_id->($gid, 'group ID') if grep { $_ eq $username } @users;
         }
         return join(',', @groups);
     };
@@ -854,7 +864,7 @@ sub resolve_oci_user {
         $groups = $get_supplementary_groups->($username) if defined($username);
     }
 
-    return ($uid, $gid, $groups);
+    return ($checked_id->($uid, 'user ID'), $checked_id->($gid, 'group ID'), $groups);
 }
 
 1;

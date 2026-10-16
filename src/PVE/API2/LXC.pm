@@ -2825,6 +2825,11 @@ __PACKAGE__->register_method({
                     if !PVE::Storage::storage_can_replicate($storecfg, $storeid, $format);
             }
 
+            PVE::LXC::Config->check_protection(
+                $target_conf,
+                "cannot assign a volume to target CT $target_vmid",
+            );
+
             return ($source_conf, $target_conf, $drive);
         };
 
@@ -3292,10 +3297,13 @@ __PACKAGE__->register_method({
 
                     eval {
                         my $conf = {
-                            unprivileged => $unprivileged,
                             arch => $arch,
                         };
-                        $rpcenv->check($authuser, '/', ['Sys.Modify']) if !$unprivileged;
+                        if ($unprivileged) {
+                            $conf->{unprivileged} = 1;
+                        } else {
+                            $rpcenv->check($authuser, '/', ['Sys.Modify']);
+                        }
                         PVE::LXC::check_ct_modify_config_perm(
                             $rpcenv,
                             $authuser,

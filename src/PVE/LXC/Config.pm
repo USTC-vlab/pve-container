@@ -498,8 +498,7 @@ my $features_desc = {
         default => 0,
         description =>
             "Allow unprivileged containers to use mknod() to add certain device nodes."
-            . " This requires a kernel with seccomp trap to user space support (5.3 or newer)."
-            . " This is experimental.",
+            . " This requires a kernel with seccomp trap to user space support (5.3 or newer).",
     },
     force_rw_sys => {
         optional => 1,
@@ -669,7 +668,7 @@ my $confdesc = {
         type => 'string',
         description => "Command to run as init, optionally with arguments;"
             . " may start with an absolute path, relative path, or a binary in \$PATH.",
-        pattern => qr/[^\x00-\x08\x0a-\x1F\x7F]+/, # no control characters besides \t tab.
+        pattern => qr/[^\x00-\x08\x0a-\x1F\x7F]+\z/, # no control characters besides \t tab.
         default => '/sbin/init',
     },
     protection => {
@@ -699,7 +698,8 @@ my $confdesc = {
         description => 'The container runtime environment as NUL-separated list.'
             . ' Replaces any lxc.environment.runtime entries in the config.',
         optional => 1,
-        pattern => qr/(?:\w+=[^\x00-\x08\x0a-\x1F\x7F]*)(?:\0\w+=[^\x00-\x08\x0a-\x1F\x7F]*)*/,
+        pattern =>
+            qr/(?:\w+=[^\x00-\x08\x0a-\x1F\x7F]*)(?:\0\w+=[^\x00-\x08\x0a-\x1F\x7F]*)*\z/,
     },
     hookscript => {
         optional => 1,
@@ -1262,13 +1262,15 @@ sub write_pct_config {
                 || $key eq 'env'
                 || $key eq 'lxc';
             my $value = $conf->{$key};
-            die "detected invalid newline inside property '$key'\n"
-                if $value =~ m/\n/;
+            die "detected invalid newline or carriage return inside property '$key'\n"
+                if $value =~ m/[\r\n]/;
             $raw .= "$key: $value\n";
         }
 
         if (my $env = $conf->{env}) {
             for my $variable (split(/\0+/, $env)) {
+                die "detected invalid newline or carriage return inside property 'env'\n"
+                    if $variable =~ m/[\r\n]/;
                 $raw .= "lxc.environment.runtime: $variable\n";
             }
         }
@@ -1277,6 +1279,8 @@ sub write_pct_config {
             foreach my $entry (@$lxcconf) {
                 my ($k, $v) = @$entry;
                 next if $k eq 'lxc.environment.runtime'; # handled above separately
+                die "detected invalid newline or carriage return inside property '$k'\n"
+                    if $k =~ m/[\r\n]/ || $v =~ m/[\r\n]/;
                 $raw .= "$k: $v\n";
             }
         }
