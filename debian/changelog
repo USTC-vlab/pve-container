@@ -218,6 +218,14 @@ pve-container (6.1.15) trixie; urgency=medium
 
  -- Proxmox Support Team <support@proxmox.com>  Tue, 20 Oct 2026 19:20:44 +0200
 
+pve-container (6.1.14+vlab1) trixie; urgency=medium
+
+  [ taoky ]
+  * Update to upstream 6.1.14 and subsequent fixes through b43307d.
+  * Preserve VLAB btrfs support and full-rootfs startup handling.
+
+ -- taoky <me@taoky.moe>  Fri, 16 Oct 2026 20:56:30 +0800
+
 pve-container (6.1.14) trixie; urgency=medium
 
   * fix #7148: reassign volume: check the target container's protection flag
