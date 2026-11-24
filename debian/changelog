@@ -1,3 +1,13 @@
+pve-container (6.1.14+vlab2) trixie; urgency=medium
+
+  [ taoky ]
+  * Format new raw container volumes as Btrfs on the user-data LVM
+    storage and as ext4 elsewhere.
+  * Retry failed writable Btrfs rootfs mounts in read-only mode during
+    startup and use the existing container OS configuration on fallback.
+
+ -- taoky <me@taoky.moe>  Tue, 24 Nov 2026 11:57:49 +0800
+
 pve-container (6.1.14+vlab1) trixie; urgency=medium
 
   [ taoky ]
