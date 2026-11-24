@@ -87,6 +87,12 @@ PVE::LXC::Tools::lxc_hook(
         };
 
         my $rootdir_fd = undef;
+        my $readonly_rootfs;
+        my $on_readonly_rootfs = sub {
+            my ($err) = @_;
+            $readonly_rootfs = 1;
+            $log_warn->("Btrfs rootfs mounted read-only after writable mount failed: $err");
+        };
         my $userns_cache = {};
         my $setup_mountpoint = sub {
             my ($opt, $mountpoint) = @_;
@@ -94,6 +100,7 @@ PVE::LXC::Tools::lxc_hook(
             my $dir = PVE::LXC::get_staging_mount_path($opt);
             my (undef, undef, $dev, $mount_fd) = PVE::LXC::mountpoint_stage(
                 $mountpoint, $dir, $storage_cfg, undef, $root_uid, $root_gid,
+                $opt eq 'rootfs' ? $on_readonly_rootfs : undef,
             );
 
             if ($mountpoint->{idmap}) {
@@ -181,7 +188,7 @@ PVE::LXC::Tools::lxc_hook(
         PVE::LXC::Config->foreach_passthrough_device($conf, $setup_passthrough_device);
 
         my $lxc_setup = PVE::LXC::Setup->new($conf, $rootdir, undef, $log_warn);
-        $lxc_setup->pre_start_hook();
+        $lxc_setup->pre_start_hook($readonly_rootfs);
 
         if (PVE::CGroup::cgroup_mode() == 2) {
             if (!$lxc_setup->unified_cgroupv2_support()) {
