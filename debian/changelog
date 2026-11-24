@@ -218,6 +218,13 @@ pve-container (6.1.15) trixie; urgency=medium
 
  -- Proxmox Support Team <support@proxmox.com>  Tue, 20 Oct 2026 19:20:44 +0200
 
+pve-container (6.1.14+vlab3) trixie; urgency=medium
+
+  * After a writable Btrfs rootfs mount fails, try a read-only mount
+    first, then retry with rescue=usebackuproot if needed.
+
+ -- taoky <me@taoky.moe>  Tue, 24 Nov 2026 12:09:17 +0800
+
 pve-container (6.1.14+vlab2) trixie; urgency=medium
 
   [ taoky ]

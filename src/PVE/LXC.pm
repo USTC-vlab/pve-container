@@ -2175,14 +2175,18 @@ sub mount_startup_rootfs {
         PVE::Tools::run_command(['mount', '-w', @extra_opts, $path, $mount_path]);
         1;
     } and return;
-    my $rw_error = $@;
+    my $errors = $@;
     my @opts = grep { PVE::LXC::Config::is_valid_ro_mount_option($_) } @$optlist;
-    my $opts = join(',', @opts, 'ro', 'nologreplay');
-    eval {
-        PVE::Tools::run_command(['mount', '-t', 'btrfs', '-o', $opts, $path, $mount_path]);
-        1;
-    } or die "${rw_error}read-only Btrfs mount also failed: $@";
-    $on_readonly->($rw_error);
+    for my $mode ('ro', 'ro,rescue=usebackuproot') {
+        my $opts = join(',', @opts, $mode);
+        my $mounted = eval {
+            PVE::Tools::run_command(['mount', '-t', 'btrfs', '-o', $opts, $path, $mount_path]);
+            1;
+        };
+        return $on_readonly->($errors) if $mounted;
+        $errors .= "Btrfs mount with $mode failed: $@";
+    }
+    die $errors;
 }
 
 # Use $stage_mount, $rootdir is treated as a temporary path to "stage" the file system. The user
