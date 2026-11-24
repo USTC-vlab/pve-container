@@ -1,3 +1,10 @@
+pve-container (6.1.14+vlab3) trixie; urgency=medium
+
+  * After a writable Btrfs rootfs mount fails, try a read-only mount
+    first, then retry with rescue=usebackuproot if needed.
+
+ -- taoky <me@taoky.moe>  Tue, 24 Nov 2026 12:09:17 +0800
+
 pve-container (6.1.14+vlab2) trixie; urgency=medium
 
   [ taoky ]
