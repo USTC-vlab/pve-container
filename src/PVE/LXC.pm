@@ -2544,6 +2544,29 @@ sub get_staging_tempfs() {
 sub mkfs {
     my ($dev, $root_uid, $root_gid) = @_;
 
+    run_command(
+        [
+            'mkfs.ext4', '-O', 'mmp', '-E', "root_owner=$root_uid:$root_gid", $dev,
+        ],
+        outfunc => sub {
+            my $line = shift;
+            # a hack to print only the relevant stuff, i.e., the one which could help on repair
+            if (
+                $line =~ /^(Creating filesystem|Filesystem UUID|Superblock backups|\s+\d+, \d)/
+            ) {
+                print "$line\n";
+            }
+        },
+        errfunc => sub {
+            my $line = shift;
+            print STDERR "$line\n" if $line && $line !~ /^mke2fs \d\.\d/;
+        },
+    );
+}
+
+sub mkfs_btrfs {
+    my ($dev, $root_uid, $root_gid) = @_;
+
     run_command(['mkfs.btrfs', $dev],
 	outfunc => sub {
 	    my $line = shift;
@@ -2587,7 +2610,13 @@ sub format_disk {
     die "cannot format volume '$volid' (format == $format)\n"
         if $format ne 'raw';
 
-    mkfs($path, $root_uid, $root_gid);
+    my $scfg = PVE::Storage::storage_config($storage_cfg, $storage);
+    if ($storage eq 'user-data' && $scfg->{type} eq 'lvm' && $scfg->{vgname} eq 'user-data') {
+        mkfs_btrfs($path, $root_uid, $root_gid);
+    } else {
+        # user-data2 might have incorrect write barrier and breaks btrfs on storage power loss
+        mkfs($path, $root_uid, $root_gid);
+    }
 }
 
 sub destroy_disks {
