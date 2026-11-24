@@ -325,9 +325,13 @@ sub check_systemd_nesting {
 }
 
 sub pre_start_hook {
-    my ($self) = @_;
+    my ($self, $readonly_rootfs) = @_;
 
-    $self->protected_call(sub { $self->{plugin}->pre_start_hook($self->{conf}) }, 1);
+    if ($readonly_rootfs) {
+        $self->{log_warn}->("starting with existing container OS configuration on read-only rootfs");
+    } else {
+        $self->protected_call(sub { $self->{plugin}->pre_start_hook($self->{conf}) }, 1);
+    }
     $self->check_systemd_nesting();
 }
 

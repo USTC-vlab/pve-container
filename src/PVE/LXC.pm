@@ -2108,9 +2108,9 @@ sub mountpoint_mount {
 }
 
 sub mountpoint_stage {
-    my ($mountpoint, $stage_dir, $storage_cfg, $snapname, $root_uid, $root_gid) = @_;
+    my ($mountpoint, $stage_dir, $storage_cfg, $snapname, $root_uid, $root_gid, $on_readonly) = @_;
     my ($path, $loop, $dev) = __mountpoint_mount(
-        $mountpoint, $stage_dir, $storage_cfg, $snapname, $root_uid, $root_gid, 1,
+        $mountpoint, $stage_dir, $storage_cfg, $snapname, $root_uid, $root_gid, 1, $on_readonly,
     );
 
     if (!defined($path)) {
@@ -2155,10 +2155,41 @@ sub mountpoint_insert_staged {
     ) or die "failed to move '$opt' into container hierarchy: $!\n";
 }
 
+sub mount_startup_rootfs {
+    my ($path, $mount_path, $optlist, $on_readonly, @extra_opts) = @_;
+
+    my $fstype;
+    my $probed = eval {
+        PVE::Tools::run_command(
+            ['blkid', '-p', '-o', 'value', '-s', 'TYPE', $path],
+            outfunc => sub { $fstype = shift },
+        );
+        1;
+    };
+    if (!$probed || !defined($fstype) || $fstype ne 'btrfs') {
+        return PVE::Tools::run_command(['mount', @extra_opts, $path, $mount_path]);
+    }
+
+    # Force the first attempt to be writable so mount cannot silently fall back to ro.
+    eval {
+        PVE::Tools::run_command(['mount', '-w', @extra_opts, $path, $mount_path]);
+        1;
+    } and return;
+    my $rw_error = $@;
+    my @opts = grep { PVE::LXC::Config::is_valid_ro_mount_option($_) } @$optlist;
+    my $opts = join(',', @opts, 'ro', 'nologreplay');
+    eval {
+        PVE::Tools::run_command(['mount', '-t', 'btrfs', '-o', $opts, $path, $mount_path]);
+        1;
+    } or die "${rw_error}read-only Btrfs mount also failed: $@";
+    $on_readonly->($rw_error);
+}
+
 # Use $stage_mount, $rootdir is treated as a temporary path to "stage" the file system. The user
 #   can then open a file descriptor to it which can be used with the `move_mount` syscall.
 sub __mountpoint_mount {
-    my ($mountpoint, $rootdir, $storage_cfg, $snapname, $root_uid, $root_gid, $stage_mount) = @_;
+    my ($mountpoint, $rootdir, $storage_cfg, $snapname, $root_uid, $root_gid, $stage_mount,
+        $on_readonly) = @_;
 
     # When staging mount points we always mount to $rootdir directly (iow. as if `mp=/`).
     # This is required since __mount_prepare_rootdir() will return handles to the parent directory
@@ -2295,7 +2326,11 @@ sub __mountpoint_mount {
                                 'usrjquota=aquota.user,grpjquota=aquota.group,jqfmt=vfsv0';
                         }
                         push @extra_opts, '-o', 'ro' if $readonly;
-                        PVE::Tools::run_command(['mount', @extra_opts, $path, $mount_path]);
+                        if ($on_readonly && !$readonly) {
+                            mount_startup_rootfs($path, $mount_path, $optlist, $on_readonly, @extra_opts);
+                        } else {
+                            PVE::Tools::run_command(['mount', @extra_opts, $path, $mount_path]);
+                        }
                     }
                 }
             };
