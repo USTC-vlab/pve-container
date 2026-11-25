@@ -1,3 +1,10 @@
+pve-container (6.1.24+vlab2) trixie; urgency=medium
+
+  * Skip log replay on all read-only Btrfs rootfs mount retries at startup.
+    Retry with rescue=usebackuproot and finally rescue=all if needed.
+
+ -- taoky <me@taoky.moe>  Thu, 26 Nov 2026 00:01:51 +0800
+
 pve-container (6.1.24+vlab1) trixie; urgency=medium
 
   * Rebase VLAB changes onto upstream 6.1.24 from pve-no-subscription.

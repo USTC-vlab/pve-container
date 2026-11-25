@@ -2177,7 +2177,8 @@ sub mount_startup_rootfs {
     } and return;
     my $errors = $@;
     my @opts = grep { PVE::LXC::Config::is_valid_ro_mount_option($_) } @$optlist;
-    for my $mode ('ro', 'ro,rescue=usebackuproot') {
+    my $ro = 'ro,rescue=nologreplay';
+    for my $mode ($ro, "$ro,rescue=usebackuproot", "$ro,rescue=all") {
         my $opts = join(',', @opts, $mode);
         my $mounted = eval {
             PVE::Tools::run_command(['mount', '-t', 'btrfs', '-o', $opts, $path, $mount_path]);
